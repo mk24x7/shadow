@@ -1,0 +1,37 @@
+name: Manager or tool request
+description: Ask Shadow to recognise another version manager, installer or tool.
+labels: ["detection"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Manager or tool
+      placeholder: nodenv, proto, pkgx
+    validations:
+      required: true
+  - type: textarea
+    id: locations
+    attributes:
+      label: Where it installs binaries and shims
+      description: Directories it adds to PATH, and whether the files there are shims or real binaries.
+      placeholder: |
+        ~/.proto/shims (shims)
+        ~/.proto/tools/node/20.1.0/bin (real binaries)
+    validations:
+      required: true
+  - type: textarea
+    id: init
+    attributes:
+      label: Init line
+      description: The line its documentation tells you to add to .zshrc or config.fish.
+      render: shell
+  - type: input
+    id: version-files
+    attributes:
+      label: Version files it reads
+      placeholder: .prototools, .nvmrc
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links to the documentation for the directories and files above.

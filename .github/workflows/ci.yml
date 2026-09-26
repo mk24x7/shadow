@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift build and test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # build.sh derives the build number from the commit count.
+          fetch-depth: 0
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Cache SwiftPM build directory
+        uses: actions/cache@v6
+        with:
+          path: .build
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: swift build
+        run: swift build -c release
+
+      - name: swift test
+        run: swift test
+
+      - name: Assemble app bundle and CLI
+        run: ./build.sh
+        env:
+          OUT_DIR: dist
+
+      - name: Verify code signatures
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/Shadow.app
+          codesign --verify --strict --verbose=2 dist/shadow
+
+      - name: CLI smoke test
+        run: |
+          dist/shadow --version
+          dist/shadow --help
+          # Exit 3 means findings were reported, which is expected on a runner.
+          set +e
+          dist/shadow --json node python3 git > report.json
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+            echo "::error::shadow exited with $status"
+            exit 1
+          fi
+          python3 -c 'import json; r = json.load(open("report.json")); print(len(r["tools"]), "tools,", len(r["contexts"]), "contexts")'
+          set +e
+          dist/shadow --shell nosuchshell
+          status=$?
+          set -e
+          test "$status" -eq 2
+
+      - name: Version parity
+        run: scripts/check-versions.sh
+
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: shellcheck
+        run: |
+          shellcheck --version
+          shellcheck build.sh dmg.sh package.sh scripts/*.sh
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: ASCII only
+        run: scripts/check-ascii.sh

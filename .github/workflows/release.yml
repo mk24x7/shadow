@@ -1,0 +1,180 @@
+name: Release
+
+on:
+  push:
+    # Also matches prerelease tags such as v1.0.0-rc.1.
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish GitHub release
+    runs-on: macos-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: build.sh uses the commit count as CFBundleVersion.
+          fetch-depth: 0
+
+      - name: Derive version
+        id: meta
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          case "$version" in
+            *-*) prerelease=true ;;
+            *) prerelease=false ;;
+          esac
+          {
+            echo "version=$version"
+            # CFBundleShortVersionString must be numeric: drop any -prerelease suffix.
+            echo "app_version=${version%%-*}"
+            echo "prerelease=$prerelease"
+            echo "build_number=$(git rev-list --count HEAD)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version $version (prerelease: $prerelease)"
+
+      - name: Version parity
+        run: scripts/check-versions.sh "$GITHUB_REF_NAME"
+
+      - name: Test
+        run: swift test
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build universal app and CLI
+        run: ./build.sh
+        env:
+          VERSION: ${{ steps.meta.outputs.app_version }}
+          BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+          ARCHS: arm64 x86_64
+          OUT_DIR: dist
+
+      - name: Inspect build
+        run: |
+          lipo -archs dist/Shadow.app/Contents/MacOS/Shadow
+          lipo -archs dist/shadow
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Shadow.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist/Shadow.app/Contents/Info.plist
+          codesign --verify --deep --strict --verbose=2 dist/Shadow.app
+          dist/shadow --version
+
+      - name: Package zip, dmg, CLI tarball and checksums
+        run: ./package.sh
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          OUT_DIR: dist
+
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          awk -v ver="$VERSION" '
+            index($0, "## [" ver "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[^]]+\]: / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "Prerelease build of Shadow $VERSION. See CHANGELOG.md for the changes planned for this release." > release-notes.md
+            else
+              echo "::error file=CHANGELOG.md::No '## [$VERSION]' section found in CHANGELOG.md"
+              exit 1
+            fi
+          fi
+          {
+            echo ""
+            echo "### Verifying the download"
+            echo ""
+            echo "Shadow is ad-hoc signed and not notarized. Compare the checksum before opening:"
+            echo ""
+            echo '```'
+            echo "shasum -a 256 -c SHA256SUMS.txt --ignore-missing"
+            echo '```'
+          } >> release-notes.md
+          /bin/cat release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "Shadow $VERSION" \
+            --notes-file release-notes.md \
+            "${flags[@]}" \
+            "dist/Shadow-$VERSION-macos-universal.zip" \
+            "dist/Shadow-$VERSION-macos-universal.dmg" \
+            "dist/shadow-$VERSION-macos-universal.tar.gz" \
+            dist/SHA256SUMS.txt
+
+  bump-tap:
+    name: Update Homebrew tap
+    needs: release
+    if: needs.release.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      # HOMEBREW_TAP_TOKEN is a fine-grained personal access token scoped to the
+      # mk24x7/homebrew-tap repository only, with Contents: read and write. The
+      # default GITHUB_TOKEN cannot push to another repository.
+      - name: Check out mk24x7/homebrew-tap
+        uses: actions/checkout@v7
+        with:
+          repository: mk24x7/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Bump formula and cask
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          fetch() {
+            curl --fail --silent --show-error --location \
+              --retry 5 --retry-delay 5 --retry-all-errors --output "$2" "$1"
+          }
+          fetch "https://github.com/mk24x7/shadow/archive/refs/tags/v$VERSION.tar.gz" source.tar.gz
+          fetch "https://github.com/mk24x7/shadow/releases/download/v$VERSION/Shadow-$VERSION-macos-universal.dmg" app.dmg
+          source_sha="$(sha256sum source.tar.gz | cut -d ' ' -f 1)"
+          dmg_sha="$(sha256sum app.dmg | cut -d ' ' -f 1)"
+          rm -f source.tar.gz app.dmg
+
+          VERSION="$VERSION" SHA="$source_sha" perl -i -pe '
+            s{^(\s*url "https://github\.com/mk24x7/shadow/archive/refs/tags/v)[^"]+(\.tar\.gz")}{$1$ENV{VERSION}$2};
+            s{^(\s*sha256 ")[0-9a-f]{64}(")}{$1$ENV{SHA}$2};
+          ' Formula/shadow.rb
+          VERSION="$VERSION" SHA="$dmg_sha" perl -i -pe '
+            s{^(\s*version ")[^"]+(")}{$1$ENV{VERSION}$2};
+            s{^(\s*sha256 ")[0-9a-f]{64}(")}{$1$ENV{SHA}$2};
+          ' Casks/shadow-app.rb
+          grep -q "sha256 \"$source_sha\"" Formula/shadow.rb
+          grep -q "sha256 \"$dmg_sha\"" Casks/shadow-app.rb
+
+          if git diff --quiet -- Formula/shadow.rb Casks/shadow-app.rb; then
+            echo "Already at $VERSION; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/shadow.rb Casks/shadow-app.rb
+          git commit -m "shadow $VERSION"
+          # Other projects bump the same tap; rebase and retry once on rejection.
+          git pull --rebase origin main
+          git push origin HEAD:main || { git pull --rebase origin main && git push origin HEAD:main; }

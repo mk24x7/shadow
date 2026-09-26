@@ -1,0 +1,59 @@
+name: Bug report
+description: Shadow reported the wrong winner, manager, version or rc line, or crashed.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Shadow output contains paths from your home directory and your PATH. Remove anything private before posting.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - macOS app
+        - CLI
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Shadow version
+      description: App > About Shadow, or `shadow --version`.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and login shell
+      placeholder: macOS 26.2, zsh
+    validations:
+      required: true
+  - type: input
+    id: managers
+    attributes:
+      label: Version managers installed
+      placeholder: Homebrew, nvm, pyenv
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What Shadow reported
+      description: The relevant block of `shadow <tool>` output.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What is actually true
+      description: For example the output of `command -v <tool>`, `<tool> --version`, or the rc line you know is responsible.
+    validations:
+      required: true
+  - type: textarea
+    id: rc
+    attributes:
+      label: Relevant rc-file lines
+      description: The lines that touch PATH, with private paths replaced.
+      render: shell
