@@ -4,7 +4,7 @@ import ShadowCore
 
 @main
 struct ShadowApp: App {
-    @StateObject private var state = AppState()
+    @StateObject private var state = Snapshot.directory != nil ? Snapshot.makeState() : AppState()
 
     var body: some Scene {
         WindowGroup {
@@ -12,7 +12,13 @@ struct ShadowApp: App {
                 .environmentObject(state)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 860, minHeight: 540)
-                .task { state.rescan() }
+                .task {
+                    if Snapshot.directory != nil {
+                        await Snapshot.run(state: state)
+                    } else {
+                        state.rescan()
+                    }
+                }
         }
         .defaultSize(width: 1080, height: 700)
         .windowStyle(.hiddenTitleBar)

@@ -120,12 +120,12 @@ struct WinnerCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(state.shorten(because.file)):\(because.line)")
                                 .font(.system(.callout, design: .monospaced))
-                            Text(because.text)
+                            Text(state.displayText(because.text))
                                 .font(.system(.callout, design: .monospaced))
                                 .foregroundColor(.green)
                                 .textSelection(.enabled)
                             if let note = because.note {
-                                Text(note)
+                                Text(state.displayText(note))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -137,7 +137,7 @@ struct WinnerCard: View {
                         DisclosureGroup("Also mentioned in \(tool.alsoMentioned.count) other line(s)") {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(tool.alsoMentioned.enumerated()), id: \.offset) { _, line in
-                                    Text("\(state.shorten(line.file)):\(line.line)  \(line.text)")
+                                    Text("\(state.shorten(line.file)):\(line.line)  \(state.displayText(line.text))")
                                         .font(.system(.caption, design: .monospaced))
                                         .foregroundColor(.secondary)
                                         .textSelection(.enabled)

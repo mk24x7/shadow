@@ -23,5 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   managed ones, missing and duplicated PATH entries, login and interactive shells disagreeing,
   GUI apps missing a manager, and ignored or mismatched version files.
 - JSON output and exit codes for scripting.
+- Hidden snapshot mode (`SHADOW_SNAPSHOT_DIR`) that renders the README screenshot from a
+  fixture machine without starting a shell or reading the real one.
 
 [Unreleased]: https://github.com/mk24x7/shadow/compare/8f32faf...HEAD

@@ -9,24 +9,33 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 300)
         } detail: {
-            VStack(spacing: 0) {
-                ToolbarRow()
-                Divider()
-                Group {
-                    if state.report == nil {
-                        ScanningPlaceholder()
-                    } else if let tool = state.selectedTool {
-                        ToolDetailView(tool: tool)
-                    } else {
-                        PathOverviewView()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider()
-                StatusBar()
-            }
-            .background(Theme.background)
+            DetailColumn()
         }
+    }
+}
+
+/// Toolbar, the selected tool or the PATH overview, and the status bar.
+struct DetailColumn: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ToolbarRow()
+            Divider()
+            Group {
+                if state.report == nil {
+                    ScanningPlaceholder()
+                } else if let tool = state.selectedTool {
+                    ToolDetailView(tool: tool)
+                } else {
+                    PathOverviewView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            StatusBar()
+        }
+        .background(Theme.background)
     }
 }
 

@@ -27,6 +27,34 @@ shellcheck build.sh dmg.sh package.sh scripts/*.sh
 
 CI runs the same commands. Tests build fake PATH trees under a temporary directory with small shell scripts that print a version, so they never depend on what is installed on the machine running them.
 
+## Screenshots
+
+The app has a hidden snapshot mode that renders the UI offscreen and quits, so
+the README screenshot can be regenerated without screen recording permission:
+
+```sh
+./build.sh
+SHADOW_SNAPSHOT_DIR=/tmp/shadow-shots dist/Shadow.app/Contents/MacOS/Shadow
+# review /tmp/shadow-shots/results.png, then:
+cp /tmp/shadow-shots/results.png assets/results.png
+```
+
+`SHADOW_SNAPSHOT_DIR` turns the mode on and is where `results.png` is written
+(2x, 2160x1400 px for the default 1080x700 pt window). The image shows the
+node detail view with the sidebar.
+
+Snapshot mode never starts a shell and never reads the real machine. It builds a
+throwaway fixture under the temporary folder (`SnapshotFixture` in
+`Sources/ShadowApp/Snapshot.swift`, laid out like the test fixture): a fake home
+with `.zprofile`, `.zshrc` and `.bash_profile`, fake `/etc/paths`, and nvm,
+pyenv, Homebrew, Go and JDK trees whose binaries are scripts that print a
+version (node twice, python3 three times, ruby, go, java, git, brew). It
+analyses fixed PATH strings for zsh -il, zsh -l, bash -il and the GUI
+environment against that fixture, strips the fixture root from displayed paths
+so they read like a real Mac, forces the dark appearance, and removes the
+fixture before quitting. Keep fixture names and versions generic when you
+change it.
+
 ## Where things live
 
 | File | What it does |

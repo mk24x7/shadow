@@ -22,9 +22,33 @@ final class AppState: ObservableObject {
     @Published var directory: String = NSHomeDirectory()
 
     private var captured: [ContextPath] = []
-    private let analyzer = Analyzer()
-    private let layout = Layout.live()
+    private let analyzer: Analyzer
+    private let layout: ShadowCore.Layout
     private var generation = 0
+    /// Snapshot mode only: PATHs to analyse instead of starting shells, and a
+    /// fixture root stripped from displayed paths.
+    private let fixedContexts: [ContextPath]?
+    private let displayRoot: String?
+
+    init() {
+        analyzer = Analyzer()
+        layout = ShadowCore.Layout.live()
+        fixedContexts = nil
+        displayRoot = nil
+    }
+
+    /// A state that analyses `contexts` against `analyzer` instead of
+    /// capturing live shells, showing paths under `displayRoot` as if they
+    /// were at the top of the file system. Used by snapshot mode.
+    init(analyzer: Analyzer, contexts: [ContextPath], primary: ShellContext,
+         directory: String, displayRoot: String) {
+        self.analyzer = analyzer
+        layout = analyzer.layout
+        fixedContexts = contexts
+        self.displayRoot = PathResolver.trimSlash(displayRoot)
+        self.primary = primary
+        self.directory = directory
+    }
 
     var visibleTools: [ToolReport] {
         guard let report else { return [] }
@@ -37,11 +61,17 @@ final class AppState: ObservableObject {
     }
 
     func shorten(_ path: String) -> String {
-        layout.shorten(path)
+        displayText(layout.shorten(path))
     }
 
     func shortenText(_ text: String) -> String {
-        text.replacingOccurrences(of: layout.home + "/", with: "~/")
+        displayText(text.replacingOccurrences(of: layout.home + "/", with: "~/"))
+    }
+
+    /// Strips the snapshot fixture root; returns `text` unchanged otherwise.
+    func displayText(_ text: String) -> String {
+        guard let displayRoot else { return text }
+        return text.replacingOccurrences(of: displayRoot + "/", with: "/")
     }
 
     /// Captures every shell's PATH again, then analyses.
@@ -55,11 +85,15 @@ final class AppState: ObservableObject {
         let contexts = capture.availableContexts
         let analyzer = self.analyzer
         let directory = self.directory
+        let fixed = fixedContexts
+        let requested = primary
         analyzer.probe.clear()
         Task.detached(priority: .userInitiated) { [weak self] in
-            let captured = capture.capture(contexts)
+            let captured = fixed ?? capture.capture(contexts)
             let usable = captured.filter { $0.path != nil }.map(\.context)
-            let primary = Analyzer.defaultPrimary(loginShell: Analyzer.loginShell(), available: usable)
+            let primary = fixed != nil && usable.contains(requested)
+                ? requested
+                : Analyzer.defaultPrimary(loginShell: Analyzer.loginShell(), available: usable)
             await MainActor.run { [weak self] in
                 self?.status = "Resolving tools and reading versions..."
             }
