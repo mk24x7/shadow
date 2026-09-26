@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-26
+
 ### Added
 
 - First release: the `shadow` CLI and the Shadow macOS app.
@@ -26,4 +28,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hidden snapshot mode (`SHADOW_SNAPSHOT_DIR`) that renders the README screenshot from a
   fixture machine without starting a shell or reading the real one.
 
-[Unreleased]: https://github.com/mk24x7/shadow/compare/8f32faf...HEAD
+[Unreleased]: https://github.com/mk24x7/shadow/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/mk24x7/shadow/compare/8f32faf...v1.0.0
